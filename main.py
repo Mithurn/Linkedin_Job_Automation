@@ -20,7 +20,7 @@ except Exception:
     DRY_RUN = False
     HEADLESS_MODE = True
     MAX_APPLICATIONS_PER_DAY = 20
-    SEARCH_QUERIES = ["Python Developer"]
+    SEARCH_QUERIES = [ "Full Stack Intern,Frontend Intern,Web Developer Intern,React Developer Intern,Node.js Intern"]
     PREFERRED_LOCATIONS = ["India"]
 
 # Flexible imports for bot / user config / components
@@ -107,7 +107,7 @@ def apply_with_bot(bot, url: str, resume_path: str):
         if page is None:
             return False
         page.goto(url, timeout=60000)
-        human_sleep(2, 4)
+        human_sleep(1, 2)
         # try a few selectors
         easy_selectors = [
             'button.jobs-apply-button',
@@ -119,14 +119,14 @@ def apply_with_bot(bot, url: str, resume_path: str):
                 loc = page.locator(sel)
                 if loc.count() > 0:
                     loc.first.click()
-                    human_sleep(1, 2)
+                    human_sleep(0.3, 0.6)
                     # attempt upload if file input present and bot has upload helper
                     if hasattr(bot, "upload_file"):
                         try:
                             file_in = page.locator('input[type="file"]')
                             if file_in.count() > 0:
                                 bot.upload_file('input[type="file"]', resume_path)
-                                human_sleep(1, 2)
+                                human_sleep(0.5, 1)
                         except Exception:
                             pass
                     # try to submit
@@ -136,7 +136,7 @@ def apply_with_bot(bot, url: str, resume_path: str):
                             s_loc = page.locator(s)
                             if s_loc.count() > 0:
                                 s_loc.first.click()
-                                human_sleep(2, 3)
+                                human_sleep(0.5, 1)
                                 return True
                         except Exception:
                             continue
@@ -162,12 +162,12 @@ def scrape_job_urls_with_bot(bot, keyword: str = "Python Developer", max_urls: i
         return []
 
     try:
-        # Build a direct search URL to avoid relying on homepage search box
+        # Build a direct search URL with Easy Apply filter enabled
         q = quote_plus(keyword)
         loc = quote_plus(keyword if not PREFERRED_LOCATIONS else PREFERRED_LOCATIONS[0])
-        search_url = f"https://www.linkedin.com/jobs/search/?keywords={q}&location={loc}"
+        search_url = f"https://www.linkedin.com/jobs/search/?keywords={q}&location={loc}&f_AL=true"
         page.goto(search_url, wait_until="domcontentloaded")
-        human_sleep(2, 4)
+        human_sleep(1, 2)
 
         # Scroll to load more results
         for _ in range(4):
@@ -175,7 +175,7 @@ def scrape_job_urls_with_bot(bot, keyword: str = "Python Developer", max_urls: i
                 page.evaluate("window.scrollBy(0, window.innerHeight);")
             except Exception:
                 pass
-            human_sleep(1.0, 2.0)
+            human_sleep(0.5, 1)
 
         # Try several link selectors to be robust against DOM changes
         candidate_selectors = [
@@ -267,7 +267,7 @@ def main(max_jobs: int = 10):
         elif hasattr(bot, "open"):
             bot.open()
         # small pause for browser readiness
-            human_sleep(1, 2)
+            human_sleep(0.5, 1)
     except Exception as e:
         print("❌ Failed to start bot:", e)
         if bot:
@@ -336,21 +336,29 @@ def main(max_jobs: int = 10):
             if page is not None:
                 try:
                     page.goto(url, timeout=60000)
-                    human_sleep(2, 4)
+                    human_sleep(1, 2)
+                    
                     # Try multiple selectors for title/company/description to avoid 'Unknown'
                     t_selectors = [
+                        ".job-details-jobs-unified-top-card__job-title h1 a",  # Specific: h1 > a inside job title div
+                        "h1.t-24.t-bold a",  # Class-based match for h1 > a
+                        ".job-details-jobs-unified-top-card__job-title h1",  # Fallback: just the h1
+                        "h1",  # Any h1 tag (usually job title)
                         ".topcard__title",
                         "h1.top-card-layout__title",
-                        "h1",
                     ]
                     c_selectors = [
+                        ".job-details-jobs-unified-top-card__company-name a",  # Specific: a inside company name div
+                        "div.job-details-jobs-unified-top-card__company-name a",  # More specific version
                         ".topcard__org-name-link",
-                        ".top-card-layout__company",
-                        ".topcard__flavor",
-                        ".topcard__company",
+                        "a[data-tracking-control-name='public_jobs_topcard-org-name']",
+                        "a[href*='/company/']",  # Any company link
                     ]
                     d_selectors = [
+                        ".jobs-description__content",
                         ".jobs-description-content__text",
+                        "div.jobs-description",
+                        "article.jobs-description",
                         ".description__text",
                         ".description",
                     ]
@@ -359,17 +367,26 @@ def main(max_jobs: int = 10):
                         try:
                             loc = page.locator(sel)
                             if loc.count() > 0:
-                                title = loc.first.inner_text().strip()
-                                break
+                                text = loc.first.inner_text().strip()
+                                if text:  # Only accept non-empty text
+                                    title = text
+                                    print(f"✓ Title found with selector: {sel[:50]}")
+                                    break
                         except Exception:
                             continue
+                    
+                    if title == "Unknown":
+                        print("⚠️ Could not extract job title - will try all selectors on next run")
 
                     for sel in c_selectors:
                         try:
                             loc = page.locator(sel)
                             if loc.count() > 0:
-                                company = loc.first.inner_text().strip()
-                                break
+                                text = loc.first.inner_text().strip()
+                                if text:  # Only accept non-empty text
+                                    company = text
+                                    print(f"✓ Company found with selector: {sel[:50]}")
+                                    break
                         except Exception:
                             continue
 
@@ -421,7 +438,7 @@ def main(max_jobs: int = 10):
                 applied_count += 1
 
             # polite pause & stop if reached daily cap
-                human_sleep(1, 2)
+                human_sleep(0.3, 0.6)
             try:
                 today_count = logger.get_today_count()
                 if today_count >= MAX_APPLICATIONS_PER_DAY:
