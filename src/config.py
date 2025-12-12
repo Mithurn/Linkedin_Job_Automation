@@ -36,12 +36,12 @@ DRY_RUN = os.getenv("DRY_RUN", "False").lower() in ("1", "true", "yes")
 HEADLESS_MODE = os.getenv("HEADLESS_MODE", "False").lower() in ("1", "true", "yes")
 # Daily/application settings (can be tuned via environment)
 try:
-    MAX_APPLICATIONS_PER_DAY = int(os.getenv("MAX_APPLICATIONS_PER_DAY", "20"))
+    MAX_APPLICATIONS_PER_DAY = int(os.getenv("MAX_APPLICATIONS_PER_DAY", "40"))
 except Exception:
     MAX_APPLICATIONS_PER_DAY = 20
 
 # Comma-separated search queries / preferred locations
-SEARCH_QUERIES = [q.strip() for q in os.getenv("SEARCH_QUERIES", "Python Developer").split(",") if q.strip()]
-PREFERRED_LOCATIONS = [q.strip() for q in os.getenv("PREFERRED_LOCATIONS", "India").split(",") if q.strip()]
+SEARCH_QUERIES = [q.strip() for q in os.getenv("SEARCH_QUERIES", "Full Stack Intern,Frontend Intern,Web Developer Intern,React Developer Intern,Node.js Intern").split(",") if q.strip()]
+PREFERRED_LOCATIONS = [q.strip() for q in os.getenv("PREFERRED_LOCATIONS", "Chennai,India").split(",") if q.strip()]
 
 print(f"✅ Config loaded. Root path: {ROOT_DIR}")

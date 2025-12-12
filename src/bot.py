@@ -83,48 +83,62 @@ class JobBot:
         print(f"\n🔗 Navigating to: {job_url}")
         try:
             self.page.goto(job_url, timeout=60000)
-            human_sleep(3, 5) # Let page load
+            human_sleep(1, 2) # Let page load
 
             # 1. Simulate Reading (Important for stealth)
             simulate_reading_pattern(self.page, "h1")
             # We look for multiple variations of the button
             apply_locators = [
-                # Buttons
+                # Most specific first (single button match)
                 "button.jobs-apply-button",
+                "button[aria-label*='Easy Apply to']",  # Includes job title - more specific
+                "button[data-control-name*='jobdetails_topcard_inapply']",
+                # Link variants
+                "a[aria-label*='Easy Apply to'][data-view-name='job-apply-button']",
+                # Generic fallbacks
                 "button[aria-label*='Easy Apply']",
-                "button:has-text('Easy Apply')",
-                # Links (new LinkedIn layout)
                 "a[aria-label*='Easy Apply']",
-                "a:has-text('Easy Apply')",
-                "a[data-view-name='job-apply-button']",
-                # Fallback: any element with Easy Apply text
-                "*[aria-label*='Easy Apply']",
-                "*:has-text('Easy Apply')"
             ]
             
             clicked = False
             for selector in apply_locators:
                 try:
                     loc = self.page.locator(selector)
-                    if loc.count() > 0 and loc.first.is_visible():
-                        print("👇 Clicking Easy Apply...")
-                        human_click(self.page, selector)
-                        clicked = True
-                        break
-                except Exception:
-                    human_sleep(0.7, 1.5)
+                    count = loc.count()
+                    if count > 0:
+                        # Find the first VISIBLE element
+                        for i in range(count):
+                            elem = loc.nth(i)
+                            if elem.is_visible():
+                                print(f"👇 Clicking Easy Apply... (found at index {i})")
+                                elem.click()
+                                clicked = True
+                                break
+                        if clicked:
+                            break
+                except Exception as e:
+                    continue
 
             if not clicked:
                 print("⚠️ No 'Easy Apply' button found (Might be external or already applied). Skipping.")
                 return "Skipped"
 
-            human_sleep(2, 3)
+            human_sleep(0.5, 1)
 
             # 3. The Form Loop (Handle Popups)
             # We loop up to 10 times to handle multi-page forms (Contact -> Resume -> Review -> Submit)
             max_steps = 10
             for step in range(max_steps):
                 print(f"   ➡️ Form Step {step + 1}")
+                
+                # Scroll within the modal to load all fields
+                try:
+                    modal = self.page.locator(".jobs-easy-apply-content")
+                    if modal.count() > 0:
+                        modal.first.evaluate("el => el.scrollBy(0, el.scrollHeight / 2)")
+                        human_sleep(0.2, 0.4)
+                except:
+                    pass
                 
                 # A. Auto-Fill inputs
                 self._fill_smart_fields()
@@ -139,7 +153,7 @@ class JobBot:
                     if not DRY_RUN:
                         try:
                             human_click(self.page, "button[aria-label='Submit application']")
-                            human_sleep(3, 5) # Wait for submission
+                            human_sleep(1, 2) # Wait for submission
                             print("   ✅ Submit clicked")
                         except Exception as e:
                             print("   ❌ Submit click failed:", e)
@@ -149,25 +163,73 @@ class JobBot:
                     return "Success"
 
                 # D. Check for NEXT or REVIEW
-                next_btn = self.page.locator("button[aria-label='Next']")
-                review_btn = self.page.locator("button[aria-label='Review']")
+                # Try multiple Next button selectors
+                next_selectors = [
+                    "button[aria-label='Continue to next step']",
+                    "button[data-easy-apply-next-button]",
+                    "button:has-text('Next')",
+                    "button[aria-label='Next']",
+                ]
+                review_selectors = [
+                    "button[data-live-test-easy-apply-review-button]",
+                    "button[aria-label='Review your application']",
+                    "button[aria-label='Review']",
+                    "button:has-text('Review')",
+                ]
 
-                if next_btn.is_visible():
-                    human_click(self.page, "button[aria-label='Next']")
-                elif review_btn.is_visible():
-                    human_click(self.page, "button[aria-label='Review']")
+                next_clicked = False
+                for selector in next_selectors:
+                    try:
+                        loc = self.page.locator(selector)
+                        if loc.count() > 0 and loc.first.is_visible():
+                            human_click(self.page, selector)
+                            print("➡️ Clicked Next")
+                            next_clicked = True
+                            break
+                    except Exception:
+                        continue
+
+                if next_clicked:
+                    pass  # Already clicked, continue to next iteration
                 else:
-                    # Check for errors
-                    if self.page.locator(".artdeco-inline-feedback__message").is_visible():
-                        print("❌ Form Error: Missing required field.")
-                        return "Failed (Form Error)"
+                    # Try Review button
+                    review_clicked = False
+                    for selector in review_selectors:
+                        try:
+                            loc = self.page.locator(selector)
+                            if loc.count() > 0 and loc.first.is_visible():
+                                # Scroll button into view first
+                                loc.first.scroll_into_view_if_needed()
+                                human_sleep(0.2, 0.3)
+                                human_click(self.page, selector)
+                                print("👀 Clicked Review")
+                                review_clicked = True
+                                break
+                        except Exception as e:
+                            continue
                     
-                    print("⚠️ Stuck: No Next/Submit button.")
-                    return "Failed (Stuck)"
+                    if not review_clicked:
+                        # Check for errors
+                        if self.page.locator(".artdeco-inline-feedback__message").is_visible():
+                            print("❌ Form Error: Missing required field.")
+                            return "Failed (Form Error)"
+                        
+                        # Debug: show what buttons are visible
+                        print("⚠️ Stuck: No Next/Submit/Review button found.")
+                        print("   🔍 Debugging - checking all visible buttons:")
+                        try:
+                            all_buttons = self.page.locator("button[aria-label]").all()
+                            for i, btn in enumerate(all_buttons[:8]):
+                                if btn.is_visible():
+                                    label = btn.get_attribute("aria-label") or "no-label"
+                                    print(f"      {i+1}. {label[:60]}")
+                        except:
+                            pass
+                        return "Failed (Stuck)"
                 
-                human_sleep(2, 3)
+                human_sleep(0.3, 0.6)
 
-                return "Failed (Too many steps)"
+            return "Failed (Too many steps)"
         except Exception as e:
             print(f"❌ Error applying: {e}")
             return f"Failed: {str(e)}"
@@ -175,10 +237,13 @@ class JobBot:
     def _fill_smart_fields(self):
         """
         Scans the page for inputs and fills them using USER_CONFIG.
+        Tracks unfilled fields for later review.
         """
+        unfilled_fields = []
+        
         try:
             # 1. Text Inputs
-            inputs = self.page.locator("input[type='text'], input[type='email'], input[type='tel']")
+            inputs = self.page.locator("input[type='text'], input[type='email'], input[type='tel'], input[type='number']")
             count = inputs.count()
             
             for i in range(count):
@@ -187,12 +252,18 @@ class JobBot:
                     label = self._get_label(field).lower()
                     
                     # Match logic
+                    matched = False
                     for key, value in PROFILE.items():
                         if key in label:
                             print(f"      ✍️ Filling {key}...")
-                            field.fill(value)
-                            human_sleep(0.5, 1)
+                            field.fill(str(value))
+                            human_sleep(0.2, 0.4)
+                            matched = True
                             break
+                    
+                    if not matched and label:
+                        unfilled_fields.append(label)
+                        print(f"      ⚠️ Skipped unfilled field: {label}")
 
             # 2. Radio Buttons (Yes/No)
             fieldsets = self.page.locator("fieldset")
@@ -200,16 +271,56 @@ class JobBot:
                 group = fieldsets.nth(i)
                 text = group.text_content().lower()
                 
+                matched = False
                 for question, answer in ANSWERS.items():
                     if question in text:
                         # Try to click the specific radio (label containing 'Yes' or 'No')
                         option = group.locator(f"label:has-text('{answer}')")
                         if option.is_visible():
                             option.click()
-                            human_sleep(0.5, 1)
-
+                            human_sleep(0.2, 0.4)
+                            matched = True
+                            break
+                
+                if not matched and text.strip():
+                    unfilled_fields.append(f"Radio: {text[:100]}")
+                    print(f"      ⚠️ Skipped unfilled radio: {text[:100]}")
+            
+            # Save unfilled fields if any
+            if unfilled_fields:
+                self._log_unfilled_fields(unfilled_fields)
+        
         except Exception:
-            pass 
+            pass
+    
+    def _log_unfilled_fields(self, fields: list):
+        """Log unfilled fields to an Excel error tracker."""
+        import pandas as pd
+        from pathlib import Path
+        from datetime import datetime
+        
+        try:
+            error_file = Path("data/unfilled_fields_tracker.xlsx")
+            
+            # Prepare data
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            data = {
+                "Timestamp": [timestamp] * len(fields),
+                "Unfilled Field": fields,
+                "Job URL": [self.page.url] * len(fields),
+            }
+            
+            df = pd.DataFrame(data)
+            
+            # Append or create
+            if error_file.exists():
+                existing = pd.read_excel(error_file)
+                df = pd.concat([existing, df], ignore_index=True)
+            
+            df.to_excel(error_file, index=False)
+            print(f"      📊 Logged {len(fields)} unfilled fields to {error_file}")
+        except Exception as e:
+            print(f"      ⚠️ Could not log unfilled fields: {e}") 
 
     def _get_label(self, element):
         """Helper to get label text for an input."""
@@ -222,17 +333,17 @@ class JobBot:
         return ""
 
     def _handle_upload(self, resume_path):
-        """Finds file inputs and uploads resume."""
+        """Finds file inputs and uploads resume - ALWAYS replaces LinkedIn's stored resume."""
         try:
             file_input = self.page.locator("input[type='file']")
-            if file_input.is_visible():
-                # Only upload if empty
-                if not file_input.get_attribute("value"): 
-                    print(f"      📎 Uploading resume...")
-                    file_input.set_input_files(resume_path)
-                    human_sleep(2, 4)
-        except:
-            pass
+            if file_input.count() > 0:
+                # ALWAYS upload our resume, even if LinkedIn has one pre-filled
+                print(f"      📎 Uploading resume: {resume_path}")
+                file_input.first.set_input_files(resume_path)
+                human_sleep(0.5, 1)
+                print(f"      ✅ Resume uploaded successfully")
+        except Exception as e:
+            print(f"      ⚠️ Resume upload skipped: {e}")
 
     def close(self):
         try:
