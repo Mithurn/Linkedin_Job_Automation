@@ -123,7 +123,33 @@ class JobBot:
                 print("⚠️ No 'Easy Apply' button found (Might be external or already applied). Skipping.")
                 return "Skipped"
 
-            human_sleep(0.5, 1)
+            # Wait for the Easy Apply modal to appear
+            print("⏳ Waiting for Easy Apply modal...")
+            try:
+                # Wait for modal container to be visible
+                modal_selectors = [
+                    ".jobs-easy-apply-content",
+                    "div[role='dialog']",
+                    ".jobs-easy-apply-modal"
+                ]
+                modal_found = False
+                for selector in modal_selectors:
+                    try:
+                        self.page.wait_for_selector(selector, state="visible", timeout=5000)
+                        print(f"✅ Modal loaded: {selector}")
+                        modal_found = True
+                        break
+                    except:
+                        continue
+                
+                if not modal_found:
+                    print("⚠️ Easy Apply modal didn't load. Job might require external application.")
+                    return "Skipped (No modal)"
+                
+                human_sleep(0.5, 1)
+            except Exception as e:
+                print(f"⚠️ Modal wait failed: {e}")
+                return "Skipped (Modal error)"
 
             # 3. The Form Loop (Handle Popups)
             # We loop up to 10 times to handle multi-page forms (Contact -> Resume -> Review -> Submit)
@@ -149,9 +175,10 @@ class JobBot:
                 # B. Upload Resume if asked
                 self._handle_upload(resume_path)
 
-                # C. Check for SUBMIT
-                submit_btn = self.page.locator("button[aria-label='Submit application']")
-                if submit_btn.is_visible():
+                # C. Check for SUBMIT (look within modal first)
+                modal = self.page.locator(".jobs-easy-apply-content")
+                submit_btn = modal.locator("button[aria-label='Submit application']") if modal.count() > 0 else self.page.locator("button[aria-label='Submit application']")
+                if submit_btn.count() > 0 and submit_btn.is_visible():
                     print("✅ Found Submit button!")
                     if not DRY_RUN:
                         try:
@@ -165,7 +192,11 @@ class JobBot:
                         print("   (DRY RUN: Submit skipped)")
                     return "Success"
 
-                # D. Check for NEXT or REVIEW
+                # D. Check for NEXT or REVIEW (within modal)
+                # Get modal context first
+                modal = self.page.locator(".jobs-easy-apply-content")
+                search_context = modal if modal.count() > 0 else self.page
+                
                 # Try multiple Next button selectors
                 next_selectors = [
                     "button[aria-label='Continue to next step']",
@@ -183,12 +214,21 @@ class JobBot:
                 next_clicked = False
                 for selector in next_selectors:
                     try:
-                        loc = self.page.locator(selector)
+                        loc = search_context.locator(selector)
                         if loc.count() > 0 and loc.first.is_visible():
-                            human_click(self.page, selector)
-                            print("➡️ Clicked Next")
-                            next_clicked = True
-                            break
+                            try:
+                                # Wait for button to be clickable and click it
+                                loc.first.scroll_into_view_if_needed()
+                                human_sleep(0.2, 0.4)
+                                loc.first.click(timeout=5000)
+                                print("➡️ Clicked Next")
+                                next_clicked = True
+                                # Wait for page transition
+                                human_sleep(0.8, 1.5)
+                                break
+                            except Exception as click_err:
+                                # If click fails, try next selector
+                                continue
                     except Exception:
                         continue
 
@@ -199,33 +239,41 @@ class JobBot:
                     review_clicked = False
                     for selector in review_selectors:
                         try:
-                            loc = self.page.locator(selector)
+                            loc = search_context.locator(selector)
                             if loc.count() > 0 and loc.first.is_visible():
-                                # Scroll button into view first
-                                loc.first.scroll_into_view_if_needed()
-                                human_sleep(0.2, 0.3)
-                                human_click(self.page, selector)
-                                print("👀 Clicked Review")
-                                review_clicked = True
-                                break
+                                try:
+                                    # Scroll button into view first
+                                    loc.first.scroll_into_view_if_needed()
+                                    human_sleep(0.2, 0.4)
+                                    loc.first.click(timeout=5000)
+                                    print("👀 Clicked Review")
+                                    review_clicked = True
+                                    # Wait for page transition
+                                    human_sleep(0.8, 1.5)
+                                    break
+                                except Exception as click_err:
+                                    continue
                         except Exception as e:
                             continue
                     
                     if not review_clicked:
                         # Check for errors
-                        if self.page.locator(".artdeco-inline-feedback__message").is_visible():
+                        if self.page.locator(".artdeco-inline-feedback__message").count() > 0:
                             print("❌ Form Error: Missing required field.")
                             return "Failed (Form Error)"
                         
-                        # Debug: show what buttons are visible
+                        # Debug: show what buttons are visible IN THE MODAL
                         print("⚠️ Stuck: No Next/Submit/Review button found.")
-                        print("   🔍 Debugging - checking all visible buttons:")
+                        print("   🔍 Debugging - checking buttons in modal:")
                         try:
-                            all_buttons = self.page.locator("button[aria-label]").all()
-                            for i, btn in enumerate(all_buttons[:8]):
-                                if btn.is_visible():
-                                    label = btn.get_attribute("aria-label") or "no-label"
-                                    print(f"      {i+1}. {label[:60]}")
+                            modal_buttons = search_context.locator("button").all()
+                            for i, btn in enumerate(modal_buttons[:10]):
+                                try:
+                                    if btn.is_visible():
+                                        label = btn.get_attribute("aria-label") or btn.inner_text()[:30] or "no-label"
+                                        print(f"      {i+1}. {label[:60]}")
+                                except:
+                                    pass
                         except:
                             pass
                         return "Failed (Stuck)"
