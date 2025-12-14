@@ -33,12 +33,37 @@
 <p align="center">
   <a href="#problem">Problem</a> •
   <a href="#solution">Solution</a> •
+  <a href="#demo">Demo</a> •
   <a href="#features">Features</a> •
   <a href="#tech-stack">Tech Stack</a> •
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
   <a href="#roadmap">Roadmap</a>
 </p>
+
+---
+
+## 🎬 Demo
+
+### **Bot in Action**
+
+<div align="center">
+  <img src="assets/demo.gif" alt="JOB-EZ Demo" width="800">
+  <p><i>Automated LinkedIn Easy Apply in action - from job search to application submission</i></p>
+</div>
+
+### **Application Tracker**
+
+<div align="center">
+  <img src="assets/job_tracker_screenshot.png" alt="Job Tracker Excel" width="800">
+  <p><i>Comprehensive Excel tracker with job details, status, and timestamps</i></p>
+</div>
+
+### **Key Highlights**
+- ⚡ **Speed**: Applies to 50+ jobs in under 30 minutes
+- 🎯 **Accuracy**: 95%+ form completion rate
+- 🤖 **Stealth**: Human-like behavior avoids detection
+- 📊 **Tracking**: Complete application history in Excel
 
 ---
 
