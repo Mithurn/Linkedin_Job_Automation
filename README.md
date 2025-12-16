@@ -1,3 +1,7 @@
+⭐ If this project helped you, please consider starring the repo.
+It really helps and motivates further development.
+
+
 <h1 align="center">
   <br>
   <a href="#"><img src="https://img.icons8.com/fluency/96/000000/linkedin.png" alt="JOB-EZ" width="120"></a>
