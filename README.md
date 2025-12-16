@@ -1,6 +1,3 @@
-⭐ If this project helped you, please consider starring the repo.
-It really helps and motivates further development.
-
 
 <h1 align="center">
   <br>
